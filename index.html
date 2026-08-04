@@ -204,6 +204,14 @@
   .empty-hint { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 24px 0; }
   canvas { width: 100%; max-width: 100%; }
   .backup-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .chart-meta { font-size: 0.95rem; color: var(--text); margin-bottom: 6px; }
+  .chart-stat {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-variant-numeric: tabular-nums;
+  }
   .chart-legend span {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -615,6 +623,25 @@
     return { categories, series };
   }
 
+  function tonnageStatsForExercise(exerciseId) {
+    const perSession = data.sessions
+      .filter(s => s.exercises.some(e => e.exerciseId === exerciseId))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(s => {
+        const e = s.exercises.find(x => x.exerciseId === exerciseId);
+        const volume = e.saetze.reduce((sum, st) => {
+          return sum + (typeof st.gewicht === "number" && typeof st.wdh === "number" ? st.gewicht * st.wdh : 0);
+        }, 0);
+        return volume;
+      })
+      .filter(v => v > 0);
+
+    if (perSession.length === 0) return null;
+    const avg = perSession.reduce((a, b) => a + b, 0) / perSession.length;
+    const last = perSession[perSession.length - 1];
+    return { avg: Math.round(avg), last: Math.round(last) };
+  }
+
   function renderAllCharts() {
     const container = document.getElementById("chart-container");
     const usedIds = new Set();
@@ -627,13 +654,19 @@
       return;
     }
 
-    container.innerHTML = exercises.map(ex => `
+    container.innerHTML = exercises.map(ex => {
+      const metaParts = [ex.maschinenName, ex.position].filter(Boolean);
+      const vol = tonnageStatsForExercise(ex.id);
+      return `
       <div class="card">
         <h2>${escapeHtml(exerciseLabel(ex))}</h2>
+        ${metaParts.length ? `<div class="chart-meta">${escapeHtml(metaParts.join(" · "))}</div>` : ""}
+        ${vol ? `<div class="chart-stat">Ø Tonnage ${vol.avg} kg·Wdh · letzte Einheit ${vol.last} kg·Wdh</div>` : ""}
         <div class="chart-legend" id="legend-${ex.id}"></div>
         <canvas id="chart-${ex.id}" height="220"></canvas>
       </div>
-    `).join("");
+    `;
+    }).join("");
 
     exercises.forEach(ex => {
       const { categories, series } = buildSeriesForExercise(ex.id);

@@ -667,7 +667,7 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-    const padding = { top: 16, right: 16, bottom: 28, left: 40 };
+    const padding = { top: 16, right: 16, bottom: 28, left: 46 };
     const w = cssWidth - padding.left - padding.right;
     const h = cssHeight - padding.top - padding.bottom;
 
@@ -694,7 +694,7 @@
     ctx.textBaseline = "middle";
     [yMin, (yMin + yMax) / 2, yMax].forEach(val => {
       const y = padding.top + h - ((val - yMin) / (yMax - yMin)) * h;
-      ctx.fillText(val.toFixed(1) + "kg", padding.left - 6, y);
+      ctx.fillText(Math.round(val) + "kg", padding.left - 6, y);
       ctx.strokeStyle = "#1c2f4a";
       ctx.beginPath();
       ctx.moveTo(padding.left, y);

@@ -204,7 +204,7 @@
   .empty-hint { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 24px 0; }
   canvas { width: 100%; max-width: 100%; }
   .backup-actions { display: flex; gap: 10px; margin-top: 8px; }
-  .chart-meta { font-size: 0.95rem; color: var(--text); margin-bottom: 6px; }
+  .chart-meta { font-size: 0.85rem; color: var(--text); margin-bottom: 8px; }
   .chart-stat {
     font-family: var(--font-mono);
     font-size: 0.8rem;
@@ -659,7 +659,7 @@
       const vol = tonnageStatsForExercise(ex.id);
       return `
       <div class="card">
-        <h2>${escapeHtml(exerciseLabel(ex))}</h2>
+        <h3>${escapeHtml(exerciseLabel(ex))}</h3>
         ${metaParts.length ? `<div class="chart-meta">${escapeHtml(metaParts.join(" · "))}</div>` : ""}
         ${vol ? `<div class="chart-stat">Ø Tonnage ${vol.avg} kg·Wdh · letzte Einheit ${vol.last} kg·Wdh</div>` : ""}
         <div class="chart-legend" id="legend-${ex.id}"></div>

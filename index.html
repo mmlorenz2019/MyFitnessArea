@@ -181,6 +181,24 @@
     cursor: pointer;
     line-height: 1;
   }
+  .edit-pencil {
+    position: absolute;
+    top: 10px;
+    right: 38px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 0.95rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .last-hint {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--accent);
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
   .session-item {
     border-bottom: 1px solid var(--border);
     padding: 10px 0;
@@ -204,7 +222,7 @@
   .empty-hint { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 24px 0; }
   canvas { width: 100%; max-width: 100%; }
   .backup-actions { display: flex; gap: 10px; margin-top: 8px; }
-  .chart-meta { font-size: 0.85rem; color: var(--text); margin-bottom: 8px; }
+  .chart-meta { font-size: 0.85rem; color: var(--text); margin: 12px 0 4px; }
   .chart-stat {
     font-family: var(--font-mono);
     font-size: 0.8rem;
@@ -212,6 +230,13 @@
     margin-bottom: 12px;
     font-variant-numeric: tabular-nums;
   }
+  .trend { font-weight: 700; }
+  .trend-up { color: #6fbf73; }
+  .trend-down { color: var(--accent-2); }
+  .trend-flat { color: var(--muted); }
+  .chart-notes { margin-top: 6px; }
+  .chart-note-item { font-size: 0.82rem; color: var(--muted); font-style: italic; margin-top: 4px; }
+  .chart-note-date { font-family: var(--font-mono); font-style: normal; color: var(--text); }
   .chart-legend span {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -258,8 +283,19 @@
   <section class="view active" id="view-entry">
     <div class="card">
       <h2>Trainingseinheit</h2>
-      <label for="session-date">Datum</label>
-      <input type="date" id="session-date">
+      <div class="row">
+        <div>
+          <label for="session-date">Datum</label>
+          <input type="date" id="session-date">
+        </div>
+        <div>
+          <label for="session-unit">Einheit</label>
+          <select id="session-unit">
+            <option value="kg">Kilogramm (kg)</option>
+            <option value="lb">Pfund (lb)</option>
+          </select>
+        </div>
+      </div>
 
       <div id="exercise-list"></div>
 
@@ -270,7 +306,7 @@
       </select>
 
       <div class="exercise-block" id="new-exercise-form" style="display:none;">
-        <h3>Neue Übung anlegen</h3>
+        <h3 id="new-ex-title">Neue Übung anlegen</h3>
         <label for="new-ex-geraet">Gerätenummer *</label>
         <input type="text" id="new-ex-geraet" placeholder="z.B. G3">
         <label for="new-ex-name">Übungsname *</label>
@@ -397,21 +433,47 @@
   }
 
   const newExerciseForm = document.getElementById("new-exercise-form");
+  const newExTitle = document.getElementById("new-ex-title");
+  const newExSaveBtn = document.getElementById("new-ex-save");
   const newExGeraet = document.getElementById("new-ex-geraet");
   const newExName = document.getElementById("new-ex-name");
   const newExMaschine = document.getElementById("new-ex-maschine");
   const newExPosition = document.getElementById("new-ex-position");
+  let editingExerciseId = null;
+
+  function openNewExerciseForm() {
+    editingExerciseId = null;
+    newExTitle.textContent = "Neue Übung anlegen";
+    newExSaveBtn.textContent = "Übung anlegen";
+    newExGeraet.value = "";
+    newExName.value = "";
+    newExMaschine.value = "";
+    newExPosition.value = "";
+    newExerciseForm.style.display = "block";
+    newExGeraet.focus();
+  }
+
+  function openEditExerciseForm(exerciseId) {
+    const ex = data.exercises.find(e => e.id === exerciseId);
+    if (!ex) return;
+    document.querySelector('.nav-btn[data-view="entry"]').click();
+    editingExerciseId = exerciseId;
+    newExTitle.textContent = "Übung bearbeiten";
+    newExSaveBtn.textContent = "Änderungen speichern";
+    newExGeraet.value = ex.geraeteNummer || "";
+    newExName.value = ex.name || "";
+    newExMaschine.value = ex.maschinenName || "";
+    newExPosition.value = ex.position || "";
+    newExerciseForm.style.display = "block";
+    newExerciseForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    newExGeraet.focus();
+  }
 
   addExerciseSelect.addEventListener("change", () => {
     const val = addExerciseSelect.value;
     if (!val) return;
     if (val === "__new__") {
-      newExerciseForm.style.display = "block";
-      newExGeraet.value = "";
-      newExName.value = "";
-      newExMaschine.value = "";
-      newExPosition.value = "";
-      newExGeraet.focus();
+      openNewExerciseForm();
     } else {
       addExerciseToSession(val);
       addExerciseSelect.value = "";
@@ -420,27 +482,63 @@
 
   document.getElementById("new-ex-cancel").addEventListener("click", () => {
     newExerciseForm.style.display = "none";
+    editingExerciseId = null;
     addExerciseSelect.value = "";
   });
 
-  document.getElementById("new-ex-save").addEventListener("click", () => {
+  newExSaveBtn.addEventListener("click", () => {
     const geraeteNummer = newExGeraet.value.trim();
     const name = newExName.value.trim();
     if (!geraeteNummer) { showToast("Bitte Gerätenummer eintragen."); newExGeraet.focus(); return; }
     if (!name) { showToast("Bitte Übungsnamen eintragen."); newExName.focus(); return; }
-    const newEx = {
-      id: uid(),
-      name,
-      geraeteNummer,
-      maschinenName: newExMaschine.value.trim(),
-      position: newExPosition.value.trim()
-    };
-    data.exercises.push(newEx);
-    saveData();
-    populateAddExerciseSelect();
-    addExerciseToSession(newEx.id);
+    const maschinenName = newExMaschine.value.trim();
+    const position = newExPosition.value.trim();
+
+    if (editingExerciseId) {
+      const ex = data.exercises.find(e => e.id === editingExerciseId);
+      Object.assign(ex, { geraeteNummer, name, maschinenName, position });
+      saveData();
+      populateAddExerciseSelect();
+      renderExerciseBlocks();
+      showToast("Übung aktualisiert.");
+      editingExerciseId = null;
+    } else {
+      const newEx = { id: uid(), name, geraeteNummer, maschinenName, position };
+      data.exercises.push(newEx);
+      saveData();
+      populateAddExerciseSelect();
+      addExerciseToSession(newEx.id);
+    }
     newExerciseForm.style.display = "none";
     addExerciseSelect.value = "";
+  });
+
+  const KG_PER_LB = 0.45359237;
+  function convertWeight(value, fromUnit, toUnit) {
+    if (typeof value !== "number" || fromUnit === toUnit) return value;
+    const kg = fromUnit === "kg" ? value : value * KG_PER_LB;
+    const out = toUnit === "kg" ? kg : kg / KG_PER_LB;
+    return Math.round(out * 100) / 100;
+  }
+
+  function lastEntryForExercise(exerciseId) {
+    const sessions = data.sessions
+      .filter(s => s.exercises.some(e => e.exerciseId === exerciseId))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    if (sessions.length === 0) return null;
+    const s = sessions[0];
+    return { date: s.date, entry: s.exercises.find(e => e.exerciseId === exerciseId) };
+  }
+
+  const sessionUnitSelect = document.getElementById("session-unit");
+  let currentUnit = "kg";
+  sessionUnitSelect.addEventListener("change", () => {
+    const newUnit = sessionUnitSelect.value;
+    currentExercises.forEach(ce => {
+      ce.saetze.forEach(s => { s.gewicht = convertWeight(s.gewicht, currentUnit, newUnit); });
+    });
+    currentUnit = newUnit;
+    renderExerciseBlocks();
   });
 
   function addExerciseToSession(exerciseId) {
@@ -453,7 +551,8 @@
     currentExercises.push({
       exerciseId: ex.id,
       saetze: [ {}, {}, {}, {}, {} ],
-      notiz: ""
+      notiz: "",
+      last: lastEntryForExercise(exerciseId)
     });
     renderExerciseBlocks();
   }
@@ -469,18 +568,31 @@
       const metaParts = [];
       if (ex.maschinenName) metaParts.push(ex.maschinenName);
       if (ex.position) metaParts.push(ex.position);
-      const setsRows = ce.saetze.map((s, si) => `
+      const lastSaetze = ce.last ? ce.last.entry.saetze : null;
+      const lastHint = lastSaetze
+        ? `<div class="last-hint">Letztes Mal (${formatDate(ce.last.date)}): ${lastSaetze.map(st => `${st.gewicht != null ? convertWeight(st.gewicht, "kg", currentUnit) : "–"}${currentUnit}×${st.wdh ?? "–"}`).join(", ")}</div>`
+        : "";
+      const setsRows = ce.saetze.map((s, si) => {
+        const lastSatz = lastSaetze ? lastSaetze[si] : null;
+        const wPlaceholder = lastSatz && typeof lastSatz.gewicht === "number"
+          ? String(convertWeight(lastSatz.gewicht, "kg", currentUnit))
+          : currentUnit;
+        const rPlaceholder = lastSatz && typeof lastSatz.wdh === "number" ? String(lastSatz.wdh) : "Wdh.";
+        return `
         <div class="set-label">${si + 1}.</div>
-        <input type="number" step="0.5" placeholder="kg" value="${s.gewicht ?? ""}"
+        <input type="number" step="0.5" placeholder="${wPlaceholder}" value="${s.gewicht ?? ""}"
           data-idx="${idx}" data-set="${si}" data-field="gewicht" class="set-input">
-        <input type="number" step="1" placeholder="Wdh." value="${s.wdh ?? ""}"
+        <input type="number" step="1" placeholder="${rPlaceholder}" value="${s.wdh ?? ""}"
           data-idx="${idx}" data-set="${si}" data-field="wdh" class="set-input">
-      `).join("");
+      `;
+      }).join("");
       return `
         <div class="exercise-block" data-idx="${idx}">
           <button class="remove-x" data-remove="${idx}" title="Übung entfernen">✕</button>
+          <button class="edit-pencil" data-edit="${ex.id}" title="Übung bearbeiten">✏</button>
           <h3>${escapeHtml(exerciseLabel(ex))}</h3>
           <div class="meta">${escapeHtml(metaParts.join(" · ") || "—")}</div>
+          ${lastHint}
           <div class="sets-grid">${setsRows}</div>
           <label>Beschwerden / Notiz (optional)</label>
           <textarea data-notiz="${idx}" placeholder="z.B. Ziehen im unteren Rücken bei letztem Satz">${escapeHtml(ce.notiz)}</textarea>
@@ -488,6 +600,9 @@
       `;
     }).join("");
 
+    exerciseListEl.querySelectorAll("[data-edit]").forEach(btn => {
+      btn.addEventListener("click", () => openEditExerciseForm(btn.dataset.edit));
+    });
     exerciseListEl.querySelectorAll(".set-input").forEach(input => {
       input.addEventListener("input", () => {
         const idx = +input.dataset.idx, si = +input.dataset.set, field = input.dataset.field;
@@ -519,19 +634,26 @@
       exerciseId: ce.exerciseId,
       saetze: ce.saetze
         .filter(s => s.gewicht !== undefined || s.wdh !== undefined)
-        .map(s => ({ gewicht: s.gewicht ?? null, wdh: s.wdh ?? null })),
+        .map(s => ({ gewicht: convertWeight(s.gewicht, currentUnit, "kg") ?? null, wdh: s.wdh ?? null })),
       notiz: ce.notiz || ""
     }));
 
-    data.sessions.push({
-      id: uid(),
-      date,
-      exercises: cleanExercises
-    });
+    const existingSession = data.sessions.find(s => s.date === date);
+    if (existingSession) {
+      existingSession.exercises.push(...cleanExercises);
+    } else {
+      data.sessions.push({
+        id: uid(),
+        date,
+        exercises: cleanExercises
+      });
+    }
     saveData();
-    showToast("Trainingseinheit gespeichert.");
+    showToast(existingSession ? "Zur heutigen Einheit hinzugefügt." : "Trainingseinheit gespeichert.");
 
     currentExercises = [];
+    currentUnit = "kg";
+    sessionUnitSelect.value = "kg";
     renderExerciseBlocks();
     document.getElementById("session-date").valueAsDate = new Date();
   });
@@ -628,18 +750,39 @@
       .filter(s => s.exercises.some(e => e.exerciseId === exerciseId))
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(s => {
-        const e = s.exercises.find(x => x.exerciseId === exerciseId);
-        const volume = e.saetze.reduce((sum, st) => {
+        // a session can contain the same exercise more than once (e.g. saved separately
+        // twice on the same day) — sum tonnage across all matching entries, not just the first
+        const matching = s.exercises.filter(x => x.exerciseId === exerciseId);
+        return matching.reduce((total, e) => total + e.saetze.reduce((sum, st) => {
           return sum + (typeof st.gewicht === "number" && typeof st.wdh === "number" ? st.gewicht * st.wdh : 0);
-        }, 0);
-        return volume;
+        }, 0), 0);
       })
       .filter(v => v > 0);
 
     if (perSession.length === 0) return null;
     const avg = perSession.reduce((a, b) => a + b, 0) / perSession.length;
     const last = perSession[perSession.length - 1];
-    return { avg: Math.round(avg), last: Math.round(last) };
+
+    let trend = null;
+    if (perSession.length >= 2) {
+      const prev = perSession[perSession.length - 2];
+      const change = (last - prev) / prev;
+      trend = change > 0.02 ? "up" : change < -0.02 ? "down" : "flat";
+    }
+
+    return { avg: Math.round(avg), last: Math.round(last), trend };
+  }
+
+  const TREND_ICON = { up: "↑", down: "↓", flat: "→" };
+
+  function notesForExercise(exerciseId) {
+    return data.sessions
+      .filter(s => s.exercises.some(e => e.exerciseId === exerciseId && e.notiz))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(s => ({
+        date: s.date,
+        notiz: s.exercises.filter(e => e.exerciseId === exerciseId && e.notiz).map(e => e.notiz).join(" / ")
+      }));
   }
 
   function renderAllCharts() {
@@ -657,16 +800,26 @@
     container.innerHTML = exercises.map(ex => {
       const metaParts = [ex.maschinenName, ex.position].filter(Boolean);
       const vol = tonnageStatsForExercise(ex.id);
+      const notes = notesForExercise(ex.id);
+      const trendHtml = vol && vol.trend
+        ? ` <span class="trend trend-${vol.trend}">${TREND_ICON[vol.trend]}</span>`
+        : "";
       return `
-      <div class="card">
+      <div class="card" style="position:relative;">
+        <button class="edit-pencil" data-edit-chart="${ex.id}" title="Übung bearbeiten">✏</button>
         <h3>${escapeHtml(exerciseLabel(ex))}</h3>
-        ${metaParts.length ? `<div class="chart-meta">${escapeHtml(metaParts.join(" · "))}</div>` : ""}
-        ${vol ? `<div class="chart-stat">Ø Tonnage ${vol.avg} kg·Wdh · letzte Einheit ${vol.last} kg·Wdh</div>` : ""}
+        ${vol ? `<div class="chart-stat">Ø Tonnage ${vol.avg} kg·Wdh · letzte Einheit ${vol.last} kg·Wdh${trendHtml}</div>` : ""}
         <div class="chart-legend" id="legend-${ex.id}"></div>
         <canvas id="chart-${ex.id}" height="220"></canvas>
+        ${metaParts.length ? `<div class="chart-meta">${escapeHtml(metaParts.join(" · "))}</div>` : ""}
+        ${notes.length ? `<div class="chart-notes">${notes.map(n => `<div class="chart-note-item"><span class="chart-note-date">${formatDate(n.date)}:</span> ${escapeHtml(n.notiz)}</div>`).join("")}</div>` : ""}
       </div>
     `;
     }).join("");
+
+    container.querySelectorAll("[data-edit-chart]").forEach(btn => {
+      btn.addEventListener("click", () => openEditExerciseForm(btn.dataset.editChart));
+    });
 
     exercises.forEach(ex => {
       const { categories, series } = buildSeriesForExercise(ex.id);

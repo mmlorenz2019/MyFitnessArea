@@ -106,12 +106,39 @@
     padding-top: 16px;
     border-top: 1px solid var(--border);
   }
-  .quality-btn.active {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-    font-weight: 700;
+  .quality-group {
+    display: flex;
+    gap: 8px;
   }
+  .quality-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 6px;
+    background: var(--surface-2);
+    border: 2px solid var(--border);
+    cursor: pointer;
+  }
+  .quality-btn .quality-icon {
+    font-size: 1.8rem;
+    line-height: 1;
+    filter: grayscale(1) opacity(0.5);
+  }
+  .quality-btn .quality-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .quality-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .quality-btn.active .quality-icon { filter: none; }
+  .quality-btn.active .quality-label { color: var(--accent); font-weight: 700; }
   label {
     display: block;
     font-size: 0.78rem;
@@ -245,6 +272,20 @@
   .trend-up { color: #6fbf73; }
   .trend-down { color: var(--accent-2); }
   .trend-flat { color: var(--muted); }
+  .chart-toggle {
+    display: inline-block;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  .chart-collapse { margin-bottom: 4px; }
   .chart-notes { margin-top: 6px; }
   .chart-note-item { font-size: 0.82rem; color: var(--muted); font-style: italic; margin-top: 4px; }
   .chart-note-date { font-family: var(--font-mono); font-style: normal; color: var(--text); }
@@ -348,10 +389,16 @@
         <input type="number" id="sauna-dauer" placeholder="z.B. 10">
 
         <label>Trainingsqualität</label>
-        <div class="row">
-          <button type="button" class="btn secondary quality-btn" data-quality="gut">Gut</button>
-          <button type="button" class="btn secondary quality-btn" data-quality="mittel">Mittel</button>
-          <button type="button" class="btn secondary quality-btn" data-quality="schlecht">Schlecht</button>
+        <div class="quality-group">
+          <button type="button" class="quality-btn" data-quality="gut">
+            <span class="quality-icon">🙂</span><span class="quality-label">Gut</span>
+          </button>
+          <button type="button" class="quality-btn" data-quality="mittel">
+            <span class="quality-icon">😐</span><span class="quality-label">Mittel</span>
+          </button>
+          <button type="button" class="quality-btn" data-quality="schlecht">
+            <span class="quality-icon">🙁</span><span class="quality-label">Schlecht</span>
+          </button>
         </div>
       </div>
 
@@ -555,6 +602,10 @@
     return Math.round(out * 100) / 100;
   }
 
+  function fmtWeight(value) {
+    return typeof value === "number" ? Number(value.toFixed(1)) : value;
+  }
+
   function lastEntryForExercise(exerciseId) {
     const sessions = data.sessions
       .filter(s => s.exercises.some(e => e.exerciseId === exerciseId))
@@ -569,7 +620,7 @@
   sessionUnitSelect.addEventListener("change", () => {
     const newUnit = sessionUnitSelect.value;
     currentExercises.forEach(ce => {
-      ce.saetze.forEach(s => { s.gewicht = convertWeight(s.gewicht, currentUnit, newUnit); });
+      ce.saetze.forEach(s => { s.gewicht = fmtWeight(convertWeight(s.gewicht, currentUnit, newUnit)); });
     });
     currentUnit = newUnit;
     renderExerciseBlocks();
@@ -604,12 +655,12 @@
       if (ex.position) metaParts.push(ex.position);
       const lastSaetze = ce.last ? ce.last.entry.saetze : null;
       const lastHint = lastSaetze
-        ? `<div class="last-hint">Letztes Mal (${formatDate(ce.last.date)}): ${lastSaetze.map(st => `${st.gewicht != null ? convertWeight(st.gewicht, "kg", currentUnit) : "–"}${currentUnit}×${st.wdh ?? "–"}`).join(", ")}</div>`
+        ? `<div class="last-hint">Letztes Mal (${formatDate(ce.last.date)}): ${lastSaetze.map(st => `${st.gewicht != null ? fmtWeight(convertWeight(st.gewicht, "kg", currentUnit)) : "–"} ${currentUnit} × ${st.wdh ?? "–"}`).join(", ")}</div>`
         : "";
       const setsRows = ce.saetze.map((s, si) => {
         const lastSatz = lastSaetze ? lastSaetze[si] : null;
         const wPlaceholder = lastSatz && typeof lastSatz.gewicht === "number"
-          ? String(convertWeight(lastSatz.gewicht, "kg", currentUnit))
+          ? String(fmtWeight(convertWeight(lastSatz.gewicht, "kg", currentUnit)))
           : currentUnit;
         const rPlaceholder = lastSatz && typeof lastSatz.wdh === "number" ? String(lastSatz.wdh) : "Wdh.";
         return `
@@ -790,7 +841,7 @@
     const ex = data.exercises.find(x => x.id === e.exerciseId);
     const name = ex ? exerciseLabel(ex) : "(gelöschte Übung)";
     const meta = ex ? [ex.maschinenName, ex.position].filter(Boolean).join(" · ") : "";
-    const sets = e.saetze.map(s => `${s.gewicht ?? "–"}kg × ${s.wdh ?? "–"}`).join(", ") || "keine Sätze erfasst";
+    const sets = e.saetze.map(s => `${s.gewicht != null ? fmtWeight(s.gewicht) : "–"} kg × ${s.wdh ?? "–"}`).join(", ") || "keine Sätze erfasst";
     return `
       <div class="ex-row">
         <div class="ex-name">${escapeHtml(name)}</div>
@@ -920,7 +971,10 @@
         <h2>Cardio &amp; Sauna</h2>
         ${summary.cardio ? `
           <div class="chart-stat">Ø Kalorien ${summary.cardio.avgKalorien ?? "–"}kcal · letztes Mal ${summary.cardio.lastKalorien ?? "–"}kcal</div>
-          <canvas id="chart-cardio" height="180"></canvas>
+          <button class="chart-toggle" data-toggle-cardio="1">Diagramm anzeigen ▸</button>
+          <div class="chart-collapse" id="collapse-cardio" style="display:none;">
+            <canvas id="chart-cardio" height="180"></canvas>
+          </div>
         ` : ""}
         ${summary.sauna ? `<div class="chart-meta">Sauna: ${summary.sauna.count} von ${summary.sauna.totalSessions} Einheiten, Ø ${summary.sauna.avgDauer} Min.</div>` : ""}
         ${summary.quality ? `<div class="chart-meta">Trainingsqualität: ${summary.quality.gut}× Gut · ${summary.quality.mittel}× Mittel · ${summary.quality.schlecht}× Schlecht</div>` : ""}
@@ -939,8 +993,11 @@
         <button class="edit-pencil" data-edit-chart="${ex.id}" title="Übung bearbeiten">✏</button>
         <h3>${escapeHtml(exerciseLabel(ex))}</h3>
         ${vol ? `<div class="chart-stat">Ø Tonnage ${vol.avg} kg·Wdh · letzte Einheit ${vol.last} kg·Wdh${trendHtml}</div>` : ""}
-        <div class="chart-legend" id="legend-${ex.id}"></div>
-        <canvas id="chart-${ex.id}" height="220"></canvas>
+        <button class="chart-toggle" data-toggle-chart="${ex.id}">Diagramm anzeigen ▸</button>
+        <div class="chart-collapse" id="collapse-${ex.id}" style="display:none;">
+          <div class="chart-legend" id="legend-${ex.id}"></div>
+          <canvas id="chart-${ex.id}" height="220"></canvas>
+        </div>
         ${metaParts.length ? `<div class="chart-meta">${escapeHtml(metaParts.join(" · "))}</div>` : ""}
         ${notes.length ? `<div class="chart-notes">${notes.map(n => `<div class="chart-note-item"><span class="chart-note-date">${formatDate(n.date)}:</span> ${escapeHtml(n.notiz)}</div>`).join("")}</div>` : ""}
       </div>
@@ -949,24 +1006,15 @@
 
     container.innerHTML = summaryHtml + exercisesHtml;
 
-    if (summary.cardio) {
-      const cardioCanvas = document.getElementById("chart-cardio");
-      drawMultiLineChart(
-        cardioCanvas,
-        [{ label: "Cardio-Dauer", color: "#e8a23d", values: summary.cardio.dauerValues }],
-        summary.cardio.categories,
-        "min"
-      );
-    }
-
     container.querySelectorAll("[data-edit-chart]").forEach(btn => {
       btn.addEventListener("click", () => openEditExerciseForm(btn.dataset.editChart));
     });
 
-    exercises.forEach(ex => {
+    function drawExerciseChart(ex) {
+      const canvas = document.getElementById("chart-" + ex.id);
+      if (!canvas || canvas.dataset.drawn) return;
       const { categories, series } = buildSeriesForExercise(ex.id);
       const legendEl = document.getElementById("legend-" + ex.id);
-      const canvas = document.getElementById("chart-" + ex.id);
       if (series.length === 0) {
         legendEl.remove();
         canvas.replaceWith(Object.assign(document.createElement("p"), {
@@ -981,7 +1029,42 @@
         </span>
       `).join("");
       drawMultiLineChart(canvas, series, categories);
+      canvas.dataset.drawn = "1";
+    }
+
+    container.querySelectorAll("[data-toggle-chart]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.toggleChart;
+        const collapseEl = document.getElementById("collapse-" + id);
+        const isOpen = collapseEl.style.display !== "none";
+        collapseEl.style.display = isOpen ? "none" : "block";
+        btn.textContent = isOpen ? "Diagramm anzeigen ▸" : "Diagramm ausblenden ▾";
+        if (!isOpen) {
+          const ex = exercises.find(e => e.id === id);
+          if (ex) drawExerciseChart(ex);
+        }
+      });
     });
+
+    const cardioToggle = container.querySelector("[data-toggle-cardio]");
+    if (cardioToggle) {
+      cardioToggle.addEventListener("click", () => {
+        const collapseEl = document.getElementById("collapse-cardio");
+        const isOpen = collapseEl.style.display !== "none";
+        collapseEl.style.display = isOpen ? "none" : "block";
+        cardioToggle.textContent = isOpen ? "Diagramm anzeigen ▸" : "Diagramm ausblenden ▾";
+        const cardioCanvas = document.getElementById("chart-cardio");
+        if (!isOpen && cardioCanvas && !cardioCanvas.dataset.drawn) {
+          drawMultiLineChart(
+            cardioCanvas,
+            [{ label: "Cardio-Dauer", color: "#e8a23d", values: summary.cardio.dauerValues }],
+            summary.cardio.categories,
+            "min"
+          );
+          cardioCanvas.dataset.drawn = "1";
+        }
+      });
+    }
   }
 
   function drawMultiLineChart(canvas, series, categories, unitLabel) {

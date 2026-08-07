@@ -101,6 +101,17 @@
     text-transform: uppercase;
     color: var(--text);
   }
+  .sub-block {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .quality-btn.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
   label {
     display: block;
     font-size: 0.78rem;
@@ -318,6 +329,29 @@
         <div class="row" style="margin-top:12px;">
           <button class="btn" id="new-ex-save">Übung anlegen</button>
           <button class="btn secondary" id="new-ex-cancel">Abbrechen</button>
+        </div>
+      </div>
+
+      <div class="sub-block">
+        <h2>Cardio &amp; Sauna (optional)</h2>
+        <div class="row">
+          <div>
+            <label for="cardio-dauer">Cardio-Dauer (Min.)</label>
+            <input type="number" id="cardio-dauer" placeholder="z.B. 30">
+          </div>
+          <div>
+            <label for="cardio-kalorien">Kalorien</label>
+            <input type="number" id="cardio-kalorien" placeholder="z.B. 250">
+          </div>
+        </div>
+        <label for="sauna-dauer">Sauna-Dauer (Min.)</label>
+        <input type="number" id="sauna-dauer" placeholder="z.B. 10">
+
+        <label>Trainingsqualität</label>
+        <div class="row">
+          <button type="button" class="btn secondary quality-btn" data-quality="gut">Gut</button>
+          <button type="button" class="btn secondary quality-btn" data-quality="mittel">Mittel</button>
+          <button type="button" class="btn secondary quality-btn" data-quality="schlecht">Schlecht</button>
         </div>
       </div>
 
@@ -625,10 +659,34 @@
 
   document.getElementById("session-date").valueAsDate = new Date();
 
+  let selectedQuality = null;
+  document.querySelectorAll(".quality-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const already = btn.classList.contains("active");
+      document.querySelectorAll(".quality-btn").forEach(b => b.classList.remove("active"));
+      selectedQuality = already ? null : btn.dataset.quality;
+      if (selectedQuality) btn.classList.add("active");
+    });
+  });
+
+  const cardioDauerInput = document.getElementById("cardio-dauer");
+  const cardioKalorienInput = document.getElementById("cardio-kalorien");
+  const saunaDauerInput = document.getElementById("sauna-dauer");
+
   document.getElementById("save-session-btn").addEventListener("click", () => {
     const date = document.getElementById("session-date").value;
     if (!date) { showToast("Bitte ein Datum wählen."); return; }
-    if (currentExercises.length === 0) { showToast("Bitte mindestens eine Übung hinzufügen."); return; }
+
+    const cardioDauer = cardioDauerInput.value === "" ? null : parseFloat(cardioDauerInput.value);
+    const cardioKalorien = cardioKalorienInput.value === "" ? null : parseFloat(cardioKalorienInput.value);
+    const saunaDauer = saunaDauerInput.value === "" ? null : parseFloat(saunaDauerInput.value);
+    const hasCardio = cardioDauer !== null || cardioKalorien !== null;
+    const hasSauna = saunaDauer !== null;
+
+    if (currentExercises.length === 0 && !hasCardio && !hasSauna && !selectedQuality) {
+      showToast("Bitte mindestens eine Übung, Cardio, Sauna oder eine Bewertung eintragen.");
+      return;
+    }
 
     const cleanExercises = currentExercises.map(ce => ({
       exerciseId: ce.exerciseId,
@@ -641,11 +699,17 @@
     const existingSession = data.sessions.find(s => s.date === date);
     if (existingSession) {
       existingSession.exercises.push(...cleanExercises);
+      if (hasCardio) existingSession.cardio = { dauer: cardioDauer, kalorien: cardioKalorien };
+      if (hasSauna) existingSession.sauna = { dauer: saunaDauer };
+      if (selectedQuality) existingSession.qualitaet = selectedQuality;
     } else {
       data.sessions.push({
         id: uid(),
         date,
-        exercises: cleanExercises
+        exercises: cleanExercises,
+        cardio: hasCardio ? { dauer: cardioDauer, kalorien: cardioKalorien } : null,
+        sauna: hasSauna ? { dauer: saunaDauer } : null,
+        qualitaet: selectedQuality
       });
     }
     saveData();
@@ -654,11 +718,31 @@
     currentExercises = [];
     currentUnit = "kg";
     sessionUnitSelect.value = "kg";
+    cardioDauerInput.value = "";
+    cardioKalorienInput.value = "";
+    saunaDauerInput.value = "";
+    selectedQuality = null;
+    document.querySelectorAll(".quality-btn").forEach(b => b.classList.remove("active"));
     renderExerciseBlocks();
     document.getElementById("session-date").valueAsDate = new Date();
   });
 
   // ---------- Verlauf ----------
+  const QUALITY_LABEL = { gut: "Gut", mittel: "Mittel", schlecht: "Schlecht" };
+
+  function sessionSubline(s) {
+    const parts = [];
+    const exCount = s.exercises.length;
+    if (exCount > 0) parts.push(`${exCount} Übung${exCount === 1 ? "" : "en"}`);
+    if (s.cardio) {
+      const kcal = s.cardio.kalorien != null ? ` · ${s.cardio.kalorien}kcal` : "";
+      parts.push(`Cardio ${s.cardio.dauer ?? "–"}min${kcal}`);
+    }
+    if (s.sauna) parts.push(`Sauna ${s.sauna.dauer ?? "–"}min`);
+    if (s.qualitaet) parts.push(QUALITY_LABEL[s.qualitaet] || s.qualitaet);
+    return parts.join(" · ") || "—";
+  }
+
   function renderHistory() {
     const list = document.getElementById("history-list");
     const sessions = data.sessions.slice().sort((a, b) => b.date.localeCompare(a.date));
@@ -667,20 +751,19 @@
       return;
     }
     list.innerHTML = sessions.map(s => {
-      const exCount = s.exercises.length;
       return `
         <div class="session-item">
           <div class="head" data-toggle="${s.id}">
             <div>
               <div class="title">${formatDate(s.date)}</div>
-              <div class="sub">${exCount} Übung${exCount === 1 ? "" : "en"}</div>
+              <div class="sub">${sessionSubline(s)}</div>
             </div>
             <div>
               <button class="btn danger small" data-delete="${s.id}">Löschen</button>
             </div>
           </div>
           <div class="session-detail" id="detail-${s.id}">
-            ${s.exercises.map(e => renderExerciseSummary(e)).join("")}
+            ${s.exercises.map(e => renderExerciseSummary(e)).join("") || '<p class="empty-hint" style="padding:8px 0;">Keine Übungen, nur Cardio/Sauna/Bewertung.</p>'}
           </div>
         </div>
       `;
@@ -785,6 +868,38 @@
       }));
   }
 
+  function cardioSaunaSummary() {
+    const withCardio = data.sessions
+      .filter(s => s.cardio && (s.cardio.dauer != null || s.cardio.kalorien != null))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const withSauna = data.sessions.filter(s => s.sauna && s.sauna.dauer != null);
+    const withQuality = data.sessions.filter(s => s.qualitaet);
+
+    const cardio = withCardio.length === 0 ? null : {
+      categories: withCardio.map(s => s.date),
+      dauerValues: withCardio.map(s => s.cardio.dauer),
+      avgKalorien: (() => {
+        const vals = withCardio.map(s => s.cardio.kalorien).filter(v => v != null);
+        return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+      })(),
+      lastKalorien: [...withCardio].reverse().find(s => s.cardio.kalorien != null)?.cardio.kalorien ?? null
+    };
+
+    const sauna = withSauna.length === 0 ? null : {
+      count: withSauna.length,
+      totalSessions: data.sessions.length,
+      avgDauer: Math.round(withSauna.reduce((a, s) => a + s.sauna.dauer, 0) / withSauna.length)
+    };
+
+    const quality = withQuality.length === 0 ? null : {
+      gut: withQuality.filter(s => s.qualitaet === "gut").length,
+      mittel: withQuality.filter(s => s.qualitaet === "mittel").length,
+      schlecht: withQuality.filter(s => s.qualitaet === "schlecht").length
+    };
+
+    return { cardio, sauna, quality };
+  }
+
   function renderAllCharts() {
     const container = document.getElementById("chart-container");
     const usedIds = new Set();
@@ -792,12 +907,27 @@
     const exercises = data.exercises.filter(ex => usedIds.has(ex.id))
       .sort((a, b) => exerciseLabel(a).localeCompare(exerciseLabel(b), "de"));
 
-    if (exercises.length === 0) {
+    const summary = cardioSaunaSummary();
+    const hasSummary = summary.cardio || summary.sauna || summary.quality;
+
+    if (exercises.length === 0 && !hasSummary) {
       container.innerHTML = '<div class="card"><p class="empty-hint">Noch keine Daten vorhanden.</p></div>';
       return;
     }
 
-    container.innerHTML = exercises.map(ex => {
+    const summaryHtml = !hasSummary ? "" : `
+      <div class="card">
+        <h2>Cardio &amp; Sauna</h2>
+        ${summary.cardio ? `
+          <div class="chart-stat">Ø Kalorien ${summary.cardio.avgKalorien ?? "–"}kcal · letztes Mal ${summary.cardio.lastKalorien ?? "–"}kcal</div>
+          <canvas id="chart-cardio" height="180"></canvas>
+        ` : ""}
+        ${summary.sauna ? `<div class="chart-meta">Sauna: ${summary.sauna.count} von ${summary.sauna.totalSessions} Einheiten, Ø ${summary.sauna.avgDauer} Min.</div>` : ""}
+        ${summary.quality ? `<div class="chart-meta">Trainingsqualität: ${summary.quality.gut}× Gut · ${summary.quality.mittel}× Mittel · ${summary.quality.schlecht}× Schlecht</div>` : ""}
+      </div>
+    `;
+
+    const exercisesHtml = exercises.map(ex => {
       const metaParts = [ex.maschinenName, ex.position].filter(Boolean);
       const vol = tonnageStatsForExercise(ex.id);
       const notes = notesForExercise(ex.id);
@@ -816,6 +946,18 @@
       </div>
     `;
     }).join("");
+
+    container.innerHTML = summaryHtml + exercisesHtml;
+
+    if (summary.cardio) {
+      const cardioCanvas = document.getElementById("chart-cardio");
+      drawMultiLineChart(
+        cardioCanvas,
+        [{ label: "Cardio-Dauer", color: "#e8a23d", values: summary.cardio.dauerValues }],
+        summary.cardio.categories,
+        "min"
+      );
+    }
 
     container.querySelectorAll("[data-edit-chart]").forEach(btn => {
       btn.addEventListener("click", () => openEditExerciseForm(btn.dataset.editChart));
@@ -842,7 +984,8 @@
     });
   }
 
-  function drawMultiLineChart(canvas, series, categories) {
+  function drawMultiLineChart(canvas, series, categories, unitLabel) {
+    unitLabel = unitLabel || "kg";
     const dpr = window.devicePixelRatio || 1;
     const cssWidth = canvas.parentElement.clientWidth;
     const cssHeight = 220;
@@ -880,7 +1023,7 @@
     ctx.textBaseline = "middle";
     [yMin, (yMin + yMax) / 2, yMax].forEach(val => {
       const y = padding.top + h - ((val - yMin) / (yMax - yMin)) * h;
-      ctx.fillText(Math.round(val) + "kg", padding.left - 6, y);
+      ctx.fillText(Math.round(val) + unitLabel, padding.left - 6, y);
       ctx.strokeStyle = "#1c2f4a";
       ctx.beginPath();
       ctx.moveTo(padding.left, y);
